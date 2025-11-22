@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Navbar from './components/Navbar';
 import CategoryList from './components/CategoryList';
 import ServiceSection from './components/ServiceSection';
+import AuthModal from './components/AuthModal';
+import ProfileSetup from './components/ProfileSetup';
+import BookingModal from './components/BookingModal';
 import { getConciergeRecommendation } from './services/geminiService';
-import { ServiceCategory, ServiceItem, AuthState, UserRole } from './types';
+import { ServiceCategory, ServiceItem, AuthState, UserRole, Booking } from './types';
 
 // --- MOCK DATA ---
 const CATEGORIES: ServiceCategory[] = [
@@ -35,18 +38,54 @@ const SERVICES: ServiceItem[] = [
 // --- COMPONENT ---
 
 const App: React.FC = () => {
-  const [authState, setAuthState] = useState<AuthState>({ isAuthenticated: false, role: 'GUEST' });
+  const [authState, setAuthState] = useState<AuthState>({ 
+    isAuthenticated: false, 
+    user: null, 
+    isProfileComplete: false 
+  });
   const [conciergeMessage, setConciergeMessage] = useState<string | null>(null);
   const [isThinking, setIsThinking] = useState(false);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  
+  // Modal States
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isProfileSetupOpen, setIsProfileSetupOpen] = useState(false);
+  const [bookingService, setBookingService] = useState<ServiceItem | null>(null);
 
-  const handleLogin = (role: UserRole) => {
-    // Simulate AWS Amplify Auth.signIn()
-    setAuthState({ isAuthenticated: true, role, name: 'Demo User' });
+  const handleSignup = (email: string, password: string, name: string, role: UserRole) => {
+    // Simulate API call
+    setAuthState({
+        isAuthenticated: true,
+        user: { email, name, role },
+        isProfileComplete: false
+    });
+    setIsAuthModalOpen(false);
+    setIsProfileSetupOpen(true);
+  };
+
+  const handleLogin = (email: string, role: UserRole) => {
+    // Simulate API call
+    setAuthState({
+        isAuthenticated: true,
+        user: { email, name: email.split('@')[0], role, bio: 'Returned user bio', avatar: '' }, // Mock data
+        isProfileComplete: true
+    });
+    setIsAuthModalOpen(false);
+  };
+
+  const handleProfileComplete = (bio: string, avatar: string) => {
+    if (authState.user) {
+        setAuthState(prev => ({
+            ...prev,
+            user: { ...prev.user!, bio, avatar },
+            isProfileComplete: true
+        }));
+    }
+    setIsProfileSetupOpen(false);
   };
 
   const handleLogout = () => {
-    // Simulate AWS Amplify Auth.signOut()
-    setAuthState({ isAuthenticated: false, role: 'GUEST' });
+    setAuthState({ isAuthenticated: false, user: null, isProfileComplete: false });
   };
 
   const handleSearch = async (query: string) => {
@@ -61,33 +100,95 @@ const App: React.FC = () => {
     setIsThinking(false);
   };
 
+  const handleBookService = (service: ServiceItem) => {
+    if (!authState.isAuthenticated) {
+        setIsAuthModalOpen(true);
+        // In a real app, we might save the intended service to open it after login
+        return;
+    }
+    setBookingService(service);
+  };
+
+  const handleConfirmBooking = (bookingData: Omit<Booking, 'id' | 'status' | 'timestamp'>) => {
+    const newBooking: Booking = {
+        ...bookingData,
+        id: Math.random().toString(36).substr(2, 9),
+        status: 'CONFIRMED',
+        timestamp: Date.now(),
+    };
+    setBookings(prev => [newBooking, ...prev]);
+    // Note: Modal handles the success view itself, we just store the data here
+  };
+
   const renderContent = () => {
-    if (authState.isAuthenticated && authState.role === 'HOTEL') {
+    if (authState.isAuthenticated && authState.user?.role === 'HOTEL') {
         return (
             <div className="max-w-7xl mx-auto px-8 py-12">
-                <h2 className="text-3xl font-bold mb-6">Hotel Dashboard</h2>
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-3xl font-bold text-gray-900">Hotel Dashboard</h2>
+                    <div className="bg-rose-100 text-rose-700 px-4 py-2 rounded-lg font-semibold text-sm">
+                        {authState.user.name}
+                    </div>
+                </div>
                 <div className="p-6 bg-white rounded-xl shadow-sm border">
                     <p className="text-gray-600">Manage active bookings, approve service providers, and view guest analytics here.</p>
-                    <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-dashed border-gray-300 text-center text-gray-400">
-                        Dashboard UI Placeholders
+                    
+                    {authState.user.bio && (
+                        <div className="mt-4 p-4 bg-gray-50 rounded-lg text-sm text-gray-500">
+                            <strong>Your Bio:</strong> {authState.user.bio}
+                        </div>
+                    )}
+
+                    <div className="mt-6">
+                        <h3 className="font-bold text-gray-800 mb-3">Recent Guest Bookings</h3>
+                        {bookings.length > 0 ? (
+                            <div className="space-y-3">
+                                {bookings.map(b => (
+                                    <div key={b.id} className="flex justify-between items-center p-4 border rounded-lg hover:bg-gray-50">
+                                        <div>
+                                            <p className="font-semibold text-gray-900">{b.serviceTitle}</p>
+                                            <p className="text-sm text-gray-500">{b.date} at {b.time}</p>
+                                        </div>
+                                        <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">
+                                            {b.status}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="p-8 bg-gray-50 rounded-lg border border-dashed border-gray-300 text-center text-gray-400">
+                                No active bookings yet.
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
         )
     }
 
-    if (authState.isAuthenticated && authState.role === 'PROVIDER') {
+    if (authState.isAuthenticated && authState.user?.role === 'PROVIDER') {
         return (
             <div className="max-w-7xl mx-auto px-8 py-12">
-                <h2 className="text-3xl font-bold mb-6">Service Provider Portal</h2>
+                <div className="flex items-center gap-4 mb-6">
+                    {authState.user.avatar && <img src={authState.user.avatar} className="w-16 h-16 rounded-full object-cover shadow-sm" alt="Profile" />}
+                    <div>
+                         <h2 className="text-3xl font-bold text-gray-900">Provider Portal</h2>
+                         <p className="text-gray-500">Welcome, {authState.user.name}</p>
+                    </div>
+                </div>
+                
                 <div className="p-6 bg-white rounded-xl shadow-sm border">
                     <p className="text-gray-600">Manage your services, availability calendar, and pricing.</p>
+                    {authState.user.bio && (
+                         <p className="mt-2 text-sm text-gray-500 italic">"{authState.user.bio}"</p>
+                    )}
                     <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                         <div className="h-32 bg-rose-50 rounded-lg flex items-center justify-center text-rose-500 font-medium border border-rose-100">
-                            New Request: Massage (Room 402)
+                         <div className="h-32 bg-rose-50 rounded-lg flex flex-col items-center justify-center text-rose-500 font-medium border border-rose-100 p-4 text-center">
+                            <span className="text-2xl font-bold">{bookings.length}</span>
+                            <span>Total Bookings</span>
                          </div>
-                         <div className="h-32 bg-gray-50 rounded-lg flex items-center justify-center text-gray-400 border border-dashed">
-                            Add New Service Listing
+                         <div className="h-32 bg-gray-50 rounded-lg flex items-center justify-center text-gray-400 border border-dashed cursor-pointer hover:bg-gray-100 transition">
+                            + Add New Service Listing
                          </div>
                     </div>
                 </div>
@@ -132,11 +233,13 @@ const App: React.FC = () => {
             <ServiceSection 
                 title="Photography" 
                 services={SERVICES.filter(s => s.categoryId === 'photo')} 
+                onBookService={handleBookService}
             />
             
             <ServiceSection 
                 title="Chefs" 
                 services={SERVICES.filter(s => s.categoryId === 'chefs')} 
+                onBookService={handleBookService}
             />
 
              {/* Footer / Disclaimer */}
@@ -148,14 +251,33 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white pb-20">
+    <div className="min-h-screen bg-white pb-20 relative">
       <Navbar 
         authState={authState} 
-        onLogin={handleLogin} 
+        onOpenAuth={() => setIsAuthModalOpen(true)} 
         onLogout={handleLogout}
         onSearch={handleSearch}
       />
       
+      <AuthModal 
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onLogin={handleLogin}
+        onSignup={handleSignup}
+      />
+
+      <ProfileSetup 
+        isOpen={isProfileSetupOpen}
+        onComplete={handleProfileComplete}
+      />
+
+      <BookingModal
+        isOpen={!!bookingService}
+        service={bookingService}
+        onClose={() => setBookingService(null)}
+        onConfirm={handleConfirmBooking}
+      />
+
       <main>
         {renderContent()}
       </main>

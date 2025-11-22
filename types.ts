@@ -21,8 +21,29 @@ export interface ServiceItem {
   isPopular?: boolean;
 }
 
+export interface UserProfile {
+  email: string;
+  name: string;
+  role: UserRole;
+  bio?: string;
+  avatar?: string;
+}
+
 export interface AuthState {
   isAuthenticated: boolean;
-  role: UserRole;
-  name?: string;
+  user: UserProfile | null;
+  isProfileComplete: boolean;
+}
+
+export interface Booking {
+  id: string;
+  serviceId: string;
+  serviceTitle: string;
+  providerName: string;
+  date: string;
+  time: string;
+  notes: string;
+  totalPrice: number;
+  status: 'PENDING' | 'CONFIRMED';
+  timestamp: number;
 }

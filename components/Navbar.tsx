@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
-import { Search, User, Menu, LogOut } from 'lucide-react';
-import { UserRole, AuthState } from '../types';
+import { Search, User, Menu, LogOut, LogIn, UserPlus } from 'lucide-react';
+import { AuthState } from '../types';
 
 interface NavbarProps {
   authState: AuthState;
-  onLogin: (role: UserRole) => void;
+  onOpenAuth: () => void;
   onLogout: () => void;
   onSearch: (query: string) => void;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ authState, onLogin, onLogout, onSearch }) => {
+const Navbar: React.FC<NavbarProps> = ({ authState, onOpenAuth, onLogout, onSearch }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [localSearch, setLocalSearch] = useState('');
 
@@ -19,22 +19,34 @@ const Navbar: React.FC<NavbarProps> = ({ authState, onLogin, onLogout, onSearch 
   };
 
   return (
-    <div className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm pb-4 pt-4">
+    <div className="sticky top-0 z-40 bg-white border-b border-gray-100 shadow-sm pb-4 pt-4">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Top Row: Logo & Auth Controls */}
         <div className="flex justify-between items-center mb-4">
             <h1 className="text-2xl font-bold text-rose-500 tracking-tight cursor-pointer">LuxeStay</h1>
             
-            <div className="relative">
-                {authState.isAuthenticated ? (
+            <div className="relative z-50">
+                {authState.isAuthenticated && authState.user ? (
                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-medium text-gray-700 bg-gray-100 px-3 py-1 rounded-full">
-                            {authState.role} View
-                        </span>
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden border border-gray-300">
+                                {authState.user.avatar ? (
+                                    <img src={authState.user.avatar} alt={authState.user.name} className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center bg-rose-100 text-rose-500 font-bold text-xs">
+                                        {authState.user.name.charAt(0).toUpperCase()}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="hidden sm:block text-right">
+                                <p className="text-sm font-semibold text-gray-900 leading-none">{authState.user.name}</p>
+                                <p className="text-xs text-gray-500 uppercase">{authState.user.role}</p>
+                            </div>
+                        </div>
                         <button 
                             onClick={onLogout}
-                            className="p-2 rounded-full hover:bg-gray-100 transition"
+                            className="p-2 rounded-full hover:bg-gray-100 transition text-gray-500"
                             title="Logout"
                         >
                             <LogOut size={20} />
@@ -44,7 +56,7 @@ const Navbar: React.FC<NavbarProps> = ({ authState, onLogin, onLogout, onSearch 
                     <div className="relative">
                         <button 
                             onClick={() => setIsMenuOpen(!isMenuOpen)}
-                            className="flex items-center gap-2 border rounded-full px-3 py-2 hover:shadow-md transition"
+                            className="flex items-center gap-2 border rounded-full px-3 py-2 hover:shadow-md transition bg-white"
                         >
                             <Menu size={18} />
                             <div className="bg-gray-500 rounded-full p-1 text-white">
@@ -53,17 +65,23 @@ const Navbar: React.FC<NavbarProps> = ({ authState, onLogin, onLogout, onSearch 
                         </button>
                         
                         {isMenuOpen && (
-                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                            <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
                                 <div className="py-1">
-                                    <button onClick={() => { onLogin('GUEST'); setIsMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                        Login as Guest
+                                    <button 
+                                        onClick={() => { onOpenAuth(); setIsMenuOpen(false); }} 
+                                        className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 font-semibold"
+                                    >
+                                        <LogIn size={16} /> Log In
                                     </button>
-                                    <button onClick={() => { onLogin('PROVIDER'); setIsMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                        Login as Provider
+                                    <button 
+                                        onClick={() => { onOpenAuth(); setIsMenuOpen(false); }} 
+                                        className="w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 border-t border-gray-100"
+                                    >
+                                        <UserPlus size={16} /> Sign Up
                                     </button>
-                                    <button onClick={() => { onLogin('HOTEL'); setIsMenuOpen(false); }} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                        Login as Hotel Admin
-                                    </button>
+                                    <div className="px-4 py-2 text-xs text-gray-400 border-t border-gray-100">
+                                        LuxeStay © 2024
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -73,7 +91,7 @@ const Navbar: React.FC<NavbarProps> = ({ authState, onLogin, onLogout, onSearch 
         </div>
 
         {/* Search Bar Pill */}
-        <div className="flex justify-center">
+        <div className="flex justify-center relative z-0">
             <form onSubmit={handleSearchSubmit} className="flex items-center bg-white border border-gray-200 rounded-full shadow-lg hover:shadow-xl transition-shadow duration-300 w-full max-w-3xl h-16 divide-x divide-gray-200">
                 
                 <div className="flex-1 px-6 py-2 hover:bg-gray-50 rounded-l-full cursor-pointer group">

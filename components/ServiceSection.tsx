@@ -6,9 +6,10 @@ import ServiceCard from './ServiceCard';
 interface ServiceSectionProps {
   title: string;
   services: ServiceItem[];
+  onBookService: (service: ServiceItem) => void;
 }
 
-const ServiceSection: React.FC<ServiceSectionProps> = ({ title, services }) => {
+const ServiceSection: React.FC<ServiceSectionProps> = ({ title, services, onBookService }) => {
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   const scroll = (direction: 'left' | 'right') => {
@@ -48,7 +49,7 @@ const ServiceSection: React.FC<ServiceSectionProps> = ({ title, services }) => {
       >
         {services.map(service => (
             <div key={service.id} className="snap-start">
-                <ServiceCard service={service} />
+                <ServiceCard service={service} onBook={onBookService} />
             </div>
         ))}
       </div>
