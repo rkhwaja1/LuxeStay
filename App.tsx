@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import CategoryList from './components/CategoryList';
 import ServiceSection from './components/ServiceSection';
@@ -7,6 +7,8 @@ import ProfileSetup from './components/ProfileSetup';
 import BookingModal from './components/BookingModal';
 import { getConciergeRecommendation } from './services/geminiService';
 import { ServiceCategory, ServiceItem, AuthState, UserRole, Booking } from './types';
+import { getCurrentUser, fetchUserAttributes, signOut } from 'aws-amplify/auth';
+import { Hub } from 'aws-amplify/utils';
 
 // --- MOCK DATA ---
 const CATEGORIES: ServiceCategory[] = [
@@ -52,28 +54,66 @@ const App: React.FC = () => {
   const [isProfileSetupOpen, setIsProfileSetupOpen] = useState(false);
   const [bookingService, setBookingService] = useState<ServiceItem | null>(null);
 
-  const handleSignup = (email: string, password: string, name: string, role: UserRole) => {
-    // Simulate API call
-    setAuthState({
-        isAuthenticated: true,
-        user: { email, name, role },
-        isProfileComplete: false
+  useEffect(() => {
+    // Check user on mount
+    checkUser();
+
+    // Listen for auth events (e.g., redirect from Google, sign in/out)
+    const unsubscribe = Hub.listen('auth', ({ payload }) => {
+      switch (payload.event) {
+        case 'signInWithRedirect':
+          // Successful Google Sign In
+          checkUser();
+          break;
+        case 'signedIn':
+          checkUser();
+          break;
+        case 'signedOut':
+          setAuthState({ isAuthenticated: false, user: null, isProfileComplete: false });
+          break;
+      }
     });
-    setIsAuthModalOpen(false);
-    setIsProfileSetupOpen(true);
+
+    return unsubscribe;
+  }, []);
+
+  const checkUser = async () => {
+    try {
+      const currentUser = await getCurrentUser();
+      const attributes = await fetchUserAttributes();
+      
+      // Map Cognito attributes to our UserProfile
+      const userRole = (attributes['custom:role'] as UserRole) || 'GUEST'; // Default to GUEST if not set
+      const userBio = attributes['custom:bio'];
+      const userAvatar = attributes.picture || attributes['custom:avatar']; // Use standard picture or custom
+      
+      setAuthState({
+        isAuthenticated: true,
+        user: {
+          email: attributes.email || '',
+          name: attributes.name || currentUser.username,
+          role: userRole,
+          bio: userBio,
+          avatar: userAvatar,
+        },
+        isProfileComplete: !!(userBio && userAvatar)
+      });
+      
+      // Determine if we need to show profile setup
+      // If logged in but no bio/avatar, allow setup (optional logic)
+      if (!userBio && !userAvatar) {
+          // We can trigger profile setup here if desired, or just let them edit later
+      }
+
+    } catch (error) {
+      console.log('Not signed in');
+      setAuthState({ isAuthenticated: false, user: null, isProfileComplete: false });
+    }
   };
 
-  const handleLogin = (email: string, role: UserRole) => {
-    // Simulate API call
-    setAuthState({
-        isAuthenticated: true,
-        user: { email, name: email.split('@')[0], role, bio: 'Returned user bio', avatar: '' }, // Mock data
-        isProfileComplete: true
-    });
-    setIsAuthModalOpen(false);
-  };
-
-  const handleProfileComplete = (bio: string, avatar: string) => {
+  const handleProfileComplete = async (bio: string, avatar: string) => {
+    // In a real implementation, you would update user attributes here using updateUserAttributes
+    // For now, we just update local state to reflect changes
     if (authState.user) {
         setAuthState(prev => ({
             ...prev,
@@ -84,8 +124,13 @@ const App: React.FC = () => {
     setIsProfileSetupOpen(false);
   };
 
-  const handleLogout = () => {
-    setAuthState({ isAuthenticated: false, user: null, isProfileComplete: false });
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      setAuthState({ isAuthenticated: false, user: null, isProfileComplete: false });
+    } catch (error) {
+      console.error("Error signing out", error);
+    }
   };
 
   const handleSearch = async (query: string) => {
@@ -103,7 +148,6 @@ const App: React.FC = () => {
   const handleBookService = (service: ServiceItem) => {
     if (!authState.isAuthenticated) {
         setIsAuthModalOpen(true);
-        // In a real app, we might save the intended service to open it after login
         return;
     }
     setBookingService(service);
@@ -117,7 +161,6 @@ const App: React.FC = () => {
         timestamp: Date.now(),
     };
     setBookings(prev => [newBooking, ...prev]);
-    // Note: Modal handles the success view itself, we just store the data here
   };
 
   const renderContent = () => {
@@ -263,8 +306,7 @@ const App: React.FC = () => {
       <AuthModal 
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        onLogin={handleLogin}
-        onSignup={handleSignup}
+        onLoginSuccess={() => setIsAuthModalOpen(false)}
       />
 
       <ProfileSetup 

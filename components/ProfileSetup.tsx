@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Camera, User } from 'lucide-react';
+import { updateUserAttributes } from 'aws-amplify/auth';
 
 interface ProfileSetupProps {
   isOpen: boolean;
@@ -10,21 +11,41 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ isOpen, onComplete }) => {
   const [bio, setBio] = useState('');
   const [avatar, setAvatar] = useState<string>('');
   const [previewUrl, setPreviewUrl] = useState<string>('');
+  const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // In a real app, you would upload this to S3 Storage and get a URL
+      // For this demo, we are using a local blob URL, which won't persist across sessions perfectly
+      // unless we use the S3 integration.
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
       setAvatar(url);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onComplete(bio, avatar);
+    setLoading(true);
+    try {
+        // Attempt to save to Cognito attributes
+        await updateUserAttributes({
+            userAttributes: {
+                'custom:bio': bio,
+                // 'picture': avatar // Cannot easily save blob URL to cognito standard attribute without S3
+            }
+        });
+        onComplete(bio, avatar);
+    } catch (e) {
+        console.error("Failed to update profile attributes", e);
+        // Still complete locally to unblock user
+        onComplete(bio, avatar);
+    } finally {
+        setLoading(false);
+    }
   };
 
   return (
@@ -68,8 +89,8 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ isOpen, onComplete }) => {
                 ></textarea>
              </div>
 
-             <button type="submit" className="w-full bg-gray-900 hover:bg-black text-white font-bold py-3 rounded-xl transition-all">
-                Finish Setup
+             <button disabled={loading} type="submit" className="w-full bg-gray-900 hover:bg-black text-white font-bold py-3 rounded-xl transition-all">
+                {loading ? 'Saving...' : 'Finish Setup'}
              </button>
           </form>
        </div>
