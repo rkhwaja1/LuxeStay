@@ -257,6 +257,7 @@ const App: React.FC = () => {
         onOpenAuth={() => setIsAuthModalOpen(true)} 
         onLogout={handleLogout}
         onSearch={handleSearch}
+        bookings={bookings}
       />
       
       <AuthModal 
