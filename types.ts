@@ -37,13 +37,9 @@ export interface AuthState {
 
 export interface Booking {
   id: string;
-  serviceId: string;
   serviceTitle: string;
-  providerName: string;
   date: string;
   time: string;
-  notes: string;
-  totalPrice: number;
-  status: 'PENDING' | 'CONFIRMED';
+  status: string;
   timestamp: number;
 }

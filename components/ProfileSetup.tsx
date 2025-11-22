@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Camera, User } from 'lucide-react';
+import { Camera, User, Loader2 } from 'lucide-react';
 import { updateUserAttributes } from 'aws-amplify/auth';
 
 interface ProfileSetupProps {
@@ -18,9 +18,6 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ isOpen, onComplete }) => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // In a real app, you would upload this to S3 Storage and get a URL
-      // For this demo, we are using a local blob URL, which won't persist across sessions perfectly
-      // unless we use the S3 integration.
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
       setAvatar(url);
@@ -31,17 +28,19 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ isOpen, onComplete }) => {
     e.preventDefault();
     setLoading(true);
     try {
-        // Attempt to save to Cognito attributes
+        // Save to Cognito
         await updateUserAttributes({
             userAttributes: {
                 'custom:bio': bio,
-                // 'picture': avatar // Cannot easily save blob URL to cognito standard attribute without S3
+                // Note: 'picture' attribute has size limits (2048 chars). 
+                // In a real app, upload to S3 and save URL here.
+                // We will just pass it to local state for the UI for now.
             }
         });
         onComplete(bio, avatar);
-    } catch (e) {
-        console.error("Failed to update profile attributes", e);
-        // Still complete locally to unblock user
+    } catch (error) {
+        console.error("Error updating profile:", error);
+        // Proceed anyway for UI demo purposes even if backend fails (e.g. attribute not defined)
         onComplete(bio, avatar);
     } finally {
         setLoading(false);
@@ -89,8 +88,8 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ isOpen, onComplete }) => {
                 ></textarea>
              </div>
 
-             <button disabled={loading} type="submit" className="w-full bg-gray-900 hover:bg-black text-white font-bold py-3 rounded-xl transition-all">
-                {loading ? 'Saving...' : 'Finish Setup'}
+             <button type="submit" disabled={loading} className="w-full bg-gray-900 hover:bg-black text-white font-bold py-3 rounded-xl transition-all flex justify-center items-center gap-2">
+                {loading ? <Loader2 className="animate-spin" size={20} /> : 'Finish Setup'}
              </button>
           </form>
        </div>

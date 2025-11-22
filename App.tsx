@@ -45,26 +45,22 @@ const App: React.FC = () => {
     user: null, 
     isProfileComplete: false 
   });
+  const [bookings, setBookings] = useState<Booking[]>([]);
   const [conciergeMessage, setConciergeMessage] = useState<string | null>(null);
   const [isThinking, setIsThinking] = useState(false);
-  const [bookings, setBookings] = useState<Booking[]>([]);
   
   // Modal States
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isProfileSetupOpen, setIsProfileSetupOpen] = useState(false);
-  const [bookingService, setBookingService] = useState<ServiceItem | null>(null);
+  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
+  const [selectedServiceForBooking, setSelectedServiceForBooking] = useState<ServiceItem | null>(null);
 
+  // --- AMPLIFY AUTH LISTENER ---
   useEffect(() => {
-    // Check user on mount
     checkUser();
 
-    // Listen for auth events (e.g., redirect from Google, sign in/out)
-    const unsubscribe = Hub.listen('auth', ({ payload }) => {
+    const hubListener = Hub.listen('auth', ({ payload }) => {
       switch (payload.event) {
-        case 'signInWithRedirect':
-          // Successful Google Sign In
-          checkUser();
-          break;
         case 'signedIn':
           checkUser();
           break;
@@ -74,46 +70,50 @@ const App: React.FC = () => {
       }
     });
 
-    return unsubscribe;
+    return () => hubListener();
   }, []);
 
   const checkUser = async () => {
     try {
-      const currentUser = await getCurrentUser();
+      const user = await getCurrentUser();
       const attributes = await fetchUserAttributes();
       
-      // Map Cognito attributes to our UserProfile
-      const userRole = (attributes['custom:role'] as UserRole) || 'GUEST'; // Default to GUEST if not set
-      const userBio = attributes['custom:bio'];
-      const userAvatar = attributes.picture || attributes['custom:avatar']; // Use standard picture or custom
+      const role = (attributes['custom:role'] as UserRole) || 'GUEST';
+      const bio = attributes['custom:bio'] as string;
       
       setAuthState({
         isAuthenticated: true,
         user: {
           email: attributes.email || '',
-          name: attributes.name || currentUser.username,
-          role: userRole,
-          bio: userBio,
-          avatar: userAvatar,
+          name: attributes.name || user.username,
+          role,
+          bio,
+          avatar: '' // In a real app, fetch from S3 or use attribute 'picture'
         },
-        isProfileComplete: !!(userBio && userAvatar)
+        isProfileComplete: !!bio
       });
-      
-      // Determine if we need to show profile setup
-      // If logged in but no bio/avatar, allow setup (optional logic)
-      if (!userBio && !userAvatar) {
-          // We can trigger profile setup here if desired, or just let them edit later
+
+      // Check if profile is incomplete
+      if (!bio) {
+          setIsProfileSetupOpen(true);
       }
 
-    } catch (error) {
-      console.log('Not signed in');
+    } catch (err) {
+      // Not signed in
       setAuthState({ isAuthenticated: false, user: null, isProfileComplete: false });
     }
   };
 
-  const handleProfileComplete = async (bio: string, avatar: string) => {
-    // In a real implementation, you would update user attributes here using updateUserAttributes
-    // For now, we just update local state to reflect changes
+  const handleLogout = async () => {
+    try {
+        await signOut();
+    } catch (error) {
+        console.error("Error signing out", error);
+    }
+  };
+
+  const handleProfileComplete = (bio: string, avatar: string) => {
+    // Optimistically update state
     if (authState.user) {
         setAuthState(prev => ({
             ...prev,
@@ -124,43 +124,47 @@ const App: React.FC = () => {
     setIsProfileSetupOpen(false);
   };
 
-  const handleLogout = async () => {
-    try {
-      await signOut();
-      setAuthState({ isAuthenticated: false, user: null, isProfileComplete: false });
-    } catch (error) {
-      console.error("Error signing out", error);
-    }
-  };
-
   const handleSearch = async (query: string) => {
     if (!query) return;
     
     setIsThinking(true);
     setConciergeMessage(null);
 
-    // Use Gemini to interpret the search
     const response = await getConciergeRecommendation(query, SERVICES);
     setConciergeMessage(response);
     setIsThinking(false);
   };
 
-  const handleBookService = (service: ServiceItem) => {
+  const handleInitiateBooking = (serviceId: string) => {
     if (!authState.isAuthenticated) {
         setIsAuthModalOpen(true);
         return;
     }
-    setBookingService(service);
+    const service = SERVICES.find(s => s.id === serviceId);
+    if (service) {
+        setSelectedServiceForBooking(service);
+        setIsBookingModalOpen(true);
+    }
   };
 
-  const handleConfirmBooking = (bookingData: Omit<Booking, 'id' | 'status' | 'timestamp'>) => {
+  const handleConfirmBooking = (date: string, time: string, notes: string) => {
+    if (!selectedServiceForBooking) return;
+
     const newBooking: Booking = {
-        ...bookingData,
         id: Math.random().toString(36).substr(2, 9),
+        serviceTitle: selectedServiceForBooking.title,
+        date,
+        time,
         status: 'CONFIRMED',
-        timestamp: Date.now(),
+        timestamp: Date.now()
     };
+
     setBookings(prev => [newBooking, ...prev]);
+    setIsBookingModalOpen(false);
+    setSelectedServiceForBooking(null);
+    
+    // Simple confirmation alert
+    alert(`Booking Confirmed!\n${newBooking.serviceTitle}\n${date} at ${time}`);
   };
 
   const renderContent = () => {
@@ -182,27 +186,8 @@ const App: React.FC = () => {
                         </div>
                     )}
 
-                    <div className="mt-6">
-                        <h3 className="font-bold text-gray-800 mb-3">Recent Guest Bookings</h3>
-                        {bookings.length > 0 ? (
-                            <div className="space-y-3">
-                                {bookings.map(b => (
-                                    <div key={b.id} className="flex justify-between items-center p-4 border rounded-lg hover:bg-gray-50">
-                                        <div>
-                                            <p className="font-semibold text-gray-900">{b.serviceTitle}</p>
-                                            <p className="text-sm text-gray-500">{b.date} at {b.time}</p>
-                                        </div>
-                                        <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">
-                                            {b.status}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="p-8 bg-gray-50 rounded-lg border border-dashed border-gray-300 text-center text-gray-400">
-                                No active bookings yet.
-                            </div>
-                        )}
+                    <div className="mt-4 p-8 bg-gray-50 rounded-lg border border-dashed border-gray-300 text-center text-gray-400">
+                        Dashboard UI Placeholders
                     </div>
                 </div>
             </div>
@@ -226,9 +211,8 @@ const App: React.FC = () => {
                          <p className="mt-2 text-sm text-gray-500 italic">"{authState.user.bio}"</p>
                     )}
                     <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                         <div className="h-32 bg-rose-50 rounded-lg flex flex-col items-center justify-center text-rose-500 font-medium border border-rose-100 p-4 text-center">
-                            <span className="text-2xl font-bold">{bookings.length}</span>
-                            <span>Total Bookings</span>
+                         <div className="h-32 bg-rose-50 rounded-lg flex items-center justify-center text-rose-500 font-medium border border-rose-100">
+                            New Request: Massage (Room 402)
                          </div>
                          <div className="h-32 bg-gray-50 rounded-lg flex items-center justify-center text-gray-400 border border-dashed cursor-pointer hover:bg-gray-100 transition">
                             + Add New Service Listing
@@ -276,13 +260,13 @@ const App: React.FC = () => {
             <ServiceSection 
                 title="Photography" 
                 services={SERVICES.filter(s => s.categoryId === 'photo')} 
-                onBookService={handleBookService}
+                onBook={handleInitiateBooking}
             />
             
             <ServiceSection 
                 title="Chefs" 
                 services={SERVICES.filter(s => s.categoryId === 'chefs')} 
-                onBookService={handleBookService}
+                onBook={handleInitiateBooking}
             />
 
              {/* Footer / Disclaimer */}
@@ -306,7 +290,10 @@ const App: React.FC = () => {
       <AuthModal 
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        onLoginSuccess={() => setIsAuthModalOpen(false)}
+        onLoginSuccess={() => {
+            setIsAuthModalOpen(false);
+            checkUser(); // Refresh state immediately
+        }}
       />
 
       <ProfileSetup 
@@ -314,10 +301,11 @@ const App: React.FC = () => {
         onComplete={handleProfileComplete}
       />
 
-      <BookingModal
-        isOpen={!!bookingService}
-        service={bookingService}
-        onClose={() => setBookingService(null)}
+      <BookingModal 
+        isOpen={isBookingModalOpen}
+        serviceTitle={selectedServiceForBooking?.title || ''}
+        price={selectedServiceForBooking?.price || 0}
+        onClose={() => setIsBookingModalOpen(false)}
         onConfirm={handleConfirmBooking}
       />
 

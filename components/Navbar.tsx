@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Search, User, Menu, LogOut, LogIn, UserPlus, ChevronDown, Calendar, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, User, Menu, LogOut, LogIn, UserPlus } from 'lucide-react';
 import { AuthState, Booking } from '../types';
 
 interface NavbarProps {
@@ -7,35 +7,16 @@ interface NavbarProps {
   onOpenAuth: () => void;
   onLogout: () => void;
   onSearch: (query: string) => void;
-  bookings: Booking[];
+  bookings?: Booking[];
 }
 
 const Navbar: React.FC<NavbarProps> = ({ authState, onOpenAuth, onLogout, onSearch, bookings }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [localSearch, setLocalSearch] = useState('');
-  const profileMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
-        setIsProfileMenuOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSearch(localSearch);
-  };
-
-  const getUserInitials = (name: string) => {
-    return name.charAt(0).toUpperCase();
   };
 
   return (
@@ -48,86 +29,29 @@ const Navbar: React.FC<NavbarProps> = ({ authState, onOpenAuth, onLogout, onSear
             
             <div className="relative z-50">
                 {authState.isAuthenticated && authState.user ? (
-                     <div className="relative" ref={profileMenuRef}>
-                        <button 
-                            onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                            className="flex items-center gap-2 p-1 pr-3 rounded-full hover:bg-gray-50 border border-transparent hover:border-gray-200 transition-all group"
-                        >
+                     <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden border border-gray-300">
                                 {authState.user.avatar ? (
                                     <img src={authState.user.avatar} alt={authState.user.name} className="w-full h-full object-cover" />
                                 ) : (
                                     <div className="w-full h-full flex items-center justify-center bg-rose-100 text-rose-500 font-bold text-xs">
-                                        {getUserInitials(authState.user.name)}
+                                        {authState.user.name.charAt(0).toUpperCase()}
                                     </div>
                                 )}
                             </div>
-                            <div className="hidden sm:block text-left">
-                                <p className="text-sm font-semibold text-gray-900 leading-none group-hover:text-rose-500 transition-colors">{authState.user.name}</p>
+                            <div className="hidden sm:block text-right">
+                                <p className="text-sm font-semibold text-gray-900 leading-none">{authState.user.name}</p>
+                                <p className="text-xs text-gray-500 uppercase">{authState.user.role}</p>
                             </div>
-                            <ChevronDown size={16} className={`text-gray-400 transition-transform duration-200 ${isProfileMenuOpen ? 'rotate-180' : ''}`} />
+                        </div>
+                        <button 
+                            onClick={onLogout}
+                            className="p-2 rounded-full hover:bg-gray-100 transition text-gray-500"
+                            title="Logout"
+                        >
+                            <LogOut size={20} />
                         </button>
-
-                        {/* User Dropdown */}
-                        {isProfileMenuOpen && (
-                            <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden animate-in fade-in zoom-in-95 duration-100 origin-top-right">
-                                <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-                                    <p className="font-bold text-gray-900">{authState.user.name}</p>
-                                    <p className="text-xs text-gray-500 capitalize">{authState.user.role.toLowerCase()} Account</p>
-                                </div>
-
-                                {/* Bookings Section (Only for Guests) */}
-                                {authState.user.role === 'GUEST' && (
-                                    <div className="py-2">
-                                        <div className="px-4 py-2 flex items-center justify-between">
-                                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">My Bookings</span>
-                                            <span className="bg-gray-100 text-gray-600 text-[10px] px-1.5 py-0.5 rounded-full font-bold">{bookings.length}</span>
-                                        </div>
-                                        
-                                        {bookings.length === 0 ? (
-                                            <div className="px-4 py-4 text-sm text-gray-400 text-center italic bg-gray-50/30 mx-2 rounded-lg border border-dashed border-gray-100">
-                                                No active bookings yet
-                                            </div>
-                                        ) : (
-                                            <div className="max-h-64 overflow-y-auto custom-scrollbar">
-                                                {bookings.map(booking => (
-                                                    <div key={booking.id} className="px-4 py-3 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors group">
-                                                        <div className="flex justify-between items-start mb-1">
-                                                            <p className="font-semibold text-sm text-gray-900 line-clamp-1 group-hover:text-rose-500 transition-colors">{booking.serviceTitle}</p>
-                                                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
-                                                                booking.status === 'CONFIRMED' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
-                                                            }`}>
-                                                                {booking.status}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center gap-3 text-xs text-gray-500">
-                                                            <div className="flex items-center gap-1">
-                                                                <Calendar size={12} />
-                                                                <span>{new Date(booking.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
-                                                            </div>
-                                                            <span>•</span>
-                                                            <span>{booking.time}</span>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                <div className="border-t border-gray-100 p-1">
-                                    <button 
-                                        onClick={() => {
-                                            onLogout();
-                                            setIsProfileMenuOpen(false);
-                                        }} 
-                                        className="w-full text-left px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50 rounded-lg flex items-center gap-2 font-medium transition-colors"
-                                    >
-                                        <LogOut size={16} /> Sign Out
-                                    </button>
-                                </div>
-                            </div>
-                        )}
                      </div>
                 ) : (
                     <div className="relative">
