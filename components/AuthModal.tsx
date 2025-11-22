@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Loader2, AlertCircle } from 'lucide-react';
-import { signUp, signIn, confirmSignUp, signInWithRedirect } from 'aws-amplify/auth';
+import { signUp, signIn, confirmSignUp } from 'aws-amplify/auth';
 import { UserRole } from '../types';
 
 interface AuthModalProps {
