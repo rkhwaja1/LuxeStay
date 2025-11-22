@@ -6,10 +6,10 @@ import ServiceCard from './ServiceCard';
 interface ServiceSectionProps {
   title: string;
   services: ServiceItem[];
-  onBook?: (serviceId: string) => void;
+  onBookService: (service: ServiceItem) => void;
 }
 
-const ServiceSection: React.FC<ServiceSectionProps> = ({ title, services, onBook }) => {
+const ServiceSection: React.FC<ServiceSectionProps> = ({ title, services, onBookService }) => {
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   const scroll = (direction: 'left' | 'right') => {
@@ -48,12 +48,8 @@ const ServiceSection: React.FC<ServiceSectionProps> = ({ title, services, onBook
         className="flex gap-6 overflow-x-auto no-scrollbar snap-x snap-mandatory pb-4"
       >
         {services.map(service => (
-            <div 
-                key={service.id} 
-                className="snap-start"
-                onClick={() => onBook && onBook(service.id)}
-            >
-                <ServiceCard service={service} />
+            <div key={service.id} className="snap-start">
+                <ServiceCard service={service} onBook={onBookService} />
             </div>
         ))}
       </div>

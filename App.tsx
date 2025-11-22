@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { getCurrentUser, fetchUserAttributes, signOut } from 'aws-amplify/auth';
+import { Hub } from 'aws-amplify/utils';
+
 import Navbar from './components/Navbar';
 import CategoryList from './components/CategoryList';
 import ServiceSection from './components/ServiceSection';
@@ -7,8 +10,6 @@ import ProfileSetup from './components/ProfileSetup';
 import BookingModal from './components/BookingModal';
 import { getConciergeRecommendation } from './services/geminiService';
 import { ServiceCategory, ServiceItem, AuthState, UserRole, Booking } from './types';
-import { getCurrentUser, fetchUserAttributes, signOut } from 'aws-amplify/auth';
-import { Hub } from 'aws-amplify/utils';
 
 // --- MOCK DATA ---
 const CATEGORIES: ServiceCategory[] = [
@@ -37,91 +38,77 @@ const SERVICES: ServiceItem[] = [
   { id: 'c4', categoryId: 'chefs', title: 'Spanish flavor, tapas, and paella', providerName: 'by Pedro', price: 60, priceUnit: 'guest', rating: 4.9, reviewCount: 42, image: 'https://picsum.photos/seed/c4/500/500' },
 ];
 
-// --- COMPONENT ---
-
 const App: React.FC = () => {
   const [authState, setAuthState] = useState<AuthState>({ 
     isAuthenticated: false, 
     user: null, 
     isProfileComplete: false 
   });
-  const [bookings, setBookings] = useState<Booking[]>([]);
   const [conciergeMessage, setConciergeMessage] = useState<string | null>(null);
   const [isThinking, setIsThinking] = useState(false);
+  const [bookings, setBookings] = useState<Booking[]>([]);
   
   // Modal States
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isProfileSetupOpen, setIsProfileSetupOpen] = useState(false);
-  const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
-  const [selectedServiceForBooking, setSelectedServiceForBooking] = useState<ServiceItem | null>(null);
-
-  // --- AMPLIFY AUTH LISTENER ---
-  useEffect(() => {
-    checkUser();
-
-    const hubListener = Hub.listen('auth', ({ payload }) => {
-      switch (payload.event) {
-        case 'signedIn':
-          checkUser();
-          break;
-        case 'signedOut':
-          setAuthState({ isAuthenticated: false, user: null, isProfileComplete: false });
-          break;
-      }
-    });
-
-    return () => hubListener();
-  }, []);
+  const [bookingService, setBookingService] = useState<ServiceItem | null>(null);
 
   const checkUser = async () => {
     try {
-      const user = await getCurrentUser();
+      const currentUser = await getCurrentUser();
       const attributes = await fetchUserAttributes();
-      
-      const role = (attributes['custom:role'] as UserRole) || 'GUEST';
-      const bio = attributes['custom:bio'] as string;
       
       setAuthState({
         isAuthenticated: true,
         user: {
           email: attributes.email || '',
-          name: attributes.name || user.username,
-          role,
-          bio,
-          avatar: '' // In a real app, fetch from S3 or use attribute 'picture'
+          name: attributes.name || 'User',
+          role: (attributes['custom:role'] as UserRole) || 'GUEST',
+          bio: attributes['custom:bio'],
+          avatar: attributes.picture
         },
-        isProfileComplete: !!bio
+        isProfileComplete: !!attributes['custom:bio']
       });
-
-      // Check if profile is incomplete
-      if (!bio) {
-          setIsProfileSetupOpen(true);
-      }
-
-    } catch (err) {
-      // Not signed in
+    } catch (error) {
+      console.log('Not signed in');
       setAuthState({ isAuthenticated: false, user: null, isProfileComplete: false });
     }
+  };
+
+  useEffect(() => {
+    checkUser();
+    const listener = Hub.listen('auth', (data) => {
+        if (data.payload.event === 'signedIn') {
+            checkUser();
+        } else if (data.payload.event === 'signedOut') {
+            setAuthState({ isAuthenticated: false, user: null, isProfileComplete: false });
+        }
+    });
+    return () => listener();
+  }, []);
+
+  const handleAuthSuccess = async () => {
+    setIsAuthModalOpen(false);
+    await checkUser();
+    // If bio is missing, prompt profile setup
+    const attributes = await fetchUserAttributes();
+    if (!attributes['custom:bio']) {
+        setIsProfileSetupOpen(true);
+    }
+  };
+
+  const handleProfileComplete = async () => {
+    await checkUser();
+    setIsProfileSetupOpen(false);
   };
 
   const handleLogout = async () => {
     try {
         await signOut();
+        setAuthState({ isAuthenticated: false, user: null, isProfileComplete: false });
     } catch (error) {
         console.error("Error signing out", error);
     }
-  };
-
-  const handleProfileComplete = (bio: string, avatar: string) => {
-    // Optimistically update state
-    if (authState.user) {
-        setAuthState(prev => ({
-            ...prev,
-            user: { ...prev.user!, bio, avatar },
-            isProfileComplete: true
-        }));
-    }
-    setIsProfileSetupOpen(false);
   };
 
   const handleSearch = async (query: string) => {
@@ -130,41 +117,30 @@ const App: React.FC = () => {
     setIsThinking(true);
     setConciergeMessage(null);
 
+    // Use Gemini to interpret the search
     const response = await getConciergeRecommendation(query, SERVICES);
     setConciergeMessage(response);
     setIsThinking(false);
   };
 
-  const handleInitiateBooking = (serviceId: string) => {
+  const handleBookService = (service: ServiceItem) => {
     if (!authState.isAuthenticated) {
         setIsAuthModalOpen(true);
+        // In a real app, we might save the intended service to open it after login
         return;
     }
-    const service = SERVICES.find(s => s.id === serviceId);
-    if (service) {
-        setSelectedServiceForBooking(service);
-        setIsBookingModalOpen(true);
-    }
+    setBookingService(service);
   };
 
-  const handleConfirmBooking = (date: string, time: string, notes: string) => {
-    if (!selectedServiceForBooking) return;
-
+  const handleConfirmBooking = (bookingData: Omit<Booking, 'id' | 'status' | 'timestamp'>) => {
     const newBooking: Booking = {
+        ...bookingData,
         id: Math.random().toString(36).substr(2, 9),
-        serviceTitle: selectedServiceForBooking.title,
-        date,
-        time,
         status: 'CONFIRMED',
-        timestamp: Date.now()
+        timestamp: Date.now(),
     };
-
     setBookings(prev => [newBooking, ...prev]);
-    setIsBookingModalOpen(false);
-    setSelectedServiceForBooking(null);
-    
-    // Simple confirmation alert
-    alert(`Booking Confirmed!\n${newBooking.serviceTitle}\n${date} at ${time}`);
+    // Note: Modal handles the success view itself, we just store the data here
   };
 
   const renderContent = () => {
@@ -186,8 +162,27 @@ const App: React.FC = () => {
                         </div>
                     )}
 
-                    <div className="mt-4 p-8 bg-gray-50 rounded-lg border border-dashed border-gray-300 text-center text-gray-400">
-                        Dashboard UI Placeholders
+                    <div className="mt-6">
+                        <h3 className="font-bold text-gray-800 mb-3">Recent Guest Bookings</h3>
+                        {bookings.length > 0 ? (
+                            <div className="space-y-3">
+                                {bookings.map(b => (
+                                    <div key={b.id} className="flex justify-between items-center p-4 border rounded-lg hover:bg-gray-50">
+                                        <div>
+                                            <p className="font-semibold text-gray-900">{b.serviceTitle}</p>
+                                            <p className="text-sm text-gray-500">{b.date} at {b.time}</p>
+                                        </div>
+                                        <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">
+                                            {b.status}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="p-8 bg-gray-50 rounded-lg border border-dashed border-gray-300 text-center text-gray-400">
+                                No active bookings yet.
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -211,8 +206,9 @@ const App: React.FC = () => {
                          <p className="mt-2 text-sm text-gray-500 italic">"{authState.user.bio}"</p>
                     )}
                     <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                         <div className="h-32 bg-rose-50 rounded-lg flex items-center justify-center text-rose-500 font-medium border border-rose-100">
-                            New Request: Massage (Room 402)
+                         <div className="h-32 bg-rose-50 rounded-lg flex flex-col items-center justify-center text-rose-500 font-medium border border-rose-100 p-4 text-center">
+                            <span className="text-2xl font-bold">{bookings.length}</span>
+                            <span>Total Bookings</span>
                          </div>
                          <div className="h-32 bg-gray-50 rounded-lg flex items-center justify-center text-gray-400 border border-dashed cursor-pointer hover:bg-gray-100 transition">
                             + Add New Service Listing
@@ -260,13 +256,13 @@ const App: React.FC = () => {
             <ServiceSection 
                 title="Photography" 
                 services={SERVICES.filter(s => s.categoryId === 'photo')} 
-                onBook={handleInitiateBooking}
+                onBookService={handleBookService}
             />
             
             <ServiceSection 
                 title="Chefs" 
                 services={SERVICES.filter(s => s.categoryId === 'chefs')} 
-                onBook={handleInitiateBooking}
+                onBookService={handleBookService}
             />
 
              {/* Footer / Disclaimer */}
@@ -290,10 +286,7 @@ const App: React.FC = () => {
       <AuthModal 
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        onLoginSuccess={() => {
-            setIsAuthModalOpen(false);
-            checkUser(); // Refresh state immediately
-        }}
+        onSuccess={handleAuthSuccess}
       />
 
       <ProfileSetup 
@@ -301,11 +294,10 @@ const App: React.FC = () => {
         onComplete={handleProfileComplete}
       />
 
-      <BookingModal 
-        isOpen={isBookingModalOpen}
-        serviceTitle={selectedServiceForBooking?.title || ''}
-        price={selectedServiceForBooking?.price || 0}
-        onClose={() => setIsBookingModalOpen(false)}
+      <BookingModal
+        isOpen={!!bookingService}
+        service={bookingService}
+        onClose={() => setBookingService(null)}
         onConfirm={handleConfirmBooking}
       />
 

@@ -4,14 +4,14 @@ import { updateUserAttributes } from 'aws-amplify/auth';
 
 interface ProfileSetupProps {
   isOpen: boolean;
-  onComplete: (bio: string, avatar: string) => void;
+  onComplete: () => void;
 }
 
 const ProfileSetup: React.FC<ProfileSetupProps> = ({ isOpen, onComplete }) => {
   const [bio, setBio] = useState('');
   const [avatar, setAvatar] = useState<string>('');
   const [previewUrl, setPreviewUrl] = useState<string>('');
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   if (!isOpen) return null;
 
@@ -20,30 +20,28 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ isOpen, onComplete }) => {
     if (file) {
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
-      setAvatar(url);
+      // In a real app, you would upload this file to S3 and get the URL.
+      // For this demo, we'll just use the placeholder logic or base64 if we were handling it fully.
+      // We will save the objectURL temporarily or a placeholder string.
+      setAvatar('https://picsum.photos/seed/user_avatar/200/200'); 
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setIsLoading(true);
     try {
-        // Save to Cognito
         await updateUserAttributes({
             userAttributes: {
                 'custom:bio': bio,
-                // Note: 'picture' attribute has size limits (2048 chars). 
-                // In a real app, upload to S3 and save URL here.
-                // We will just pass it to local state for the UI for now.
-            }
+                picture: avatar || '',
+            },
         });
-        onComplete(bio, avatar);
+        onComplete();
     } catch (error) {
         console.error("Error updating profile:", error);
-        // Proceed anyway for UI demo purposes even if backend fails (e.g. attribute not defined)
-        onComplete(bio, avatar);
     } finally {
-        setLoading(false);
+        setIsLoading(false);
     }
   };
 
@@ -88,8 +86,8 @@ const ProfileSetup: React.FC<ProfileSetupProps> = ({ isOpen, onComplete }) => {
                 ></textarea>
              </div>
 
-             <button type="submit" disabled={loading} className="w-full bg-gray-900 hover:bg-black text-white font-bold py-3 rounded-xl transition-all flex justify-center items-center gap-2">
-                {loading ? <Loader2 className="animate-spin" size={20} /> : 'Finish Setup'}
+             <button type="submit" disabled={isLoading} className="w-full bg-gray-900 hover:bg-black text-white font-bold py-3 rounded-xl transition-all flex items-center justify-center">
+                {isLoading ? <Loader2 className="animate-spin"/> : 'Finish Setup'}
              </button>
           </form>
        </div>
